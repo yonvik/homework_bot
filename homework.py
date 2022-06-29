@@ -42,6 +42,7 @@ handler = RotatingFileHandler(
 )
 logger.addHandler(handler)
 
+
 def send_message(bot, message):
     """Отправка сообщения."""
     try:
@@ -51,12 +52,15 @@ def send_message(bot, message):
         logger.error('мимо!')
         return ('мимо!')
 
+
 def get_api_answer(current_timestamp):
     """Запрос к API."""
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
     try:
-        current_timestamp = requests.get(ENDPOINT, headers=HEADERS, params=params)
+        current_timestamp = requests.get(
+            ENDPOINT, headers=HEADERS, params=params
+        )
     except requests.exceptions.HTTPError as http_err:
         logger.error("Http Error:", http_err)
         return ("Http Error:", http_err)
@@ -71,7 +75,7 @@ def get_api_answer(current_timestamp):
 
 
 def check_response(response):
-    """Проверка API на корректность"""
+    """Проверка API на корректность."""
     if len(response) == 0:
         logger.error('Empty response')
     try:
@@ -84,7 +88,7 @@ def check_response(response):
 
 
 def parse_status(homework):
-    """Сообщение с информацией о ревью"""
+    """Сообщение с информацией о ревью."""
     if 'homework_name' not in homework:
         raise KeyError('Empty value homework_name')
     homework_name = homework['homework_name']
@@ -99,8 +103,9 @@ def parse_status(homework):
         return ('Undocumented status of homework.', errkey)
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
+
 def check_tokens():
-    """Проверка наличия токенов"""
+    """Проверка наличия токенов."""
     if not all([PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]):
         logger.critical(
             'Not all required environment variables have been passed'
@@ -127,6 +132,7 @@ def main():
             message = f'Сбой в работе программы: {error}'
             send_message(bot, message)
             time.sleep(RETRY_TIME)
+
 
 if __name__ == '__main__':
     main()
