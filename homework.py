@@ -48,8 +48,8 @@ def send_message(bot, message):
         bot.send_message(TELEGRAM_CHAT_ID, message)
         logger.info('Send message')
     except Exception:
-        logger.error('Different problem with message')
-        return ('Different problem with message')
+        logger.error('мимо!')
+        return ('мимо!')
 
 def get_api_answer(current_timestamp):
     """Запрос к API."""
@@ -66,7 +66,7 @@ def get_api_answer(current_timestamp):
     if current_timestamp.status_code != HTTPStatus.OK.value:
         raise HTTPNot200('HTTPNot200')
     current_timestamp = current_timestamp.json()
-    logger.debug('response done')
+    logger.debug('удачно!')
     return current_timestamp
 
 
