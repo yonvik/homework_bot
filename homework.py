@@ -38,6 +38,7 @@ RESPONSE_UNEXPECTED = ('Unexpected response from the server. Error: {error}'
                        'API response: {status}')
 ERROR_REPONSE = 'Unexpected response from the server. API response: {status}'
 ERROR_KEY = 'No key: {type}}'
+HOMEWORK_DICT = 'Homework not a dict'
 HOMEWORK_TYPE = 'Homework not a type: {type}'
 UNDOCUMENDED_STATUS = 'Undocumented status of homework: {homework_status}'
 STATUS_CHANGED = 'Изменился статус проверки работы "{homework_name}".{verdict}'
@@ -102,7 +103,7 @@ def get_api_answer(timestamp):
 def check_response(response):
     """Проверка API на корректность."""
     if not isinstance(response, dict):
-        raise TypeError(HOMEWORK_TYPE)
+        raise TypeError(HOMEWORK_DICT)
     try:
         homework = response['homeworks']
     except KeyError as error:
