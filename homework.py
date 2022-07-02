@@ -1,17 +1,18 @@
-import os
 import logging
-from logging.handlers import RotatingFileHandler
-import requests
-from http import HTTPStatus
-
+import os
+import sys
 import time
+
+from http import HTTPStatus
+from logging.handlers import RotatingFileHandler
+from urllib.error import HTTPError
+
+import requests
 import telegram
 
 from dotenv import load_dotenv
-from exception import HTTPNot200
 
 load_dotenv()
-
 
 PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
@@ -20,26 +21,42 @@ TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 RETRY_TIME = 600
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
 HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
+FOLDER_LOG = __file__ + '.log'
 
 
-HOMEWORK_STATUSES = {
+HOMEWORK_VERDICTS = {
     'approved': 'Работа проверена: ревьюеру всё понравилось. Ура!',
     'reviewing': 'Работа взята на проверку ревьюером.',
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    filename='telegramm_bot.log',
-    format='%(asctime)s, %(levelname)s, %(message)s, %(name)s',
-    filemode='w'
-)
+SEND_MESSAGE = 'Send message: {message}'
+ERROR_TELEGRAMM = 'Failed to send message! Error: {error}'
+ERROR_REQUEST_HTTP = 'Http Error: {error}'
+ERROR_CONNECTING = 'Error Connecting : {error}'
+RESPONSE_UNEXPECTED = ('Unexpected response from the server. Error: {error}'
+                       'API response: {status}')
+ERROR_REPONSE = 'Unexpected response from the server. API response: {status}'
+ERROR_KEY = 'No key: {type}}'
+HOMEWORK_TYPE = 'Homework not a type: {type}'
+UNDOCUMENDED_STATUS = 'Undocumented status of homework: {homework_status}'
+STATUS_CHANGED = 'Изменился статус проверки работы "{homework_name}".{verdict}'
+ERROR_PROJECT = 'Сбой в работе программы: {error}'
+ERROR_TOKENS = 'Required variable missing: {name}'
+NO_NEW_CHECKS = 'No new checks in homeworks'
+TOKENS = ['PRACTICUM_TOKEN', 'TELEGRAM_TOKEN', 'TELEGRAM_CHAT_ID']
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-handler = RotatingFileHandler(
-    'my_logger.log', maxBytes=50000000, backupCount=5
+formatter = logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
+console_log = logging.StreamHandler(sys.stdout)
+logger.addHandler(console_log)
+handler = RotatingFileHandler(
+    FOLDER_LOG, maxBytes=50000000, backupCount=5
+)
+handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 
@@ -47,70 +64,72 @@ def send_message(bot, message):
     """Отправка сообщения."""
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
-        logger.info('Send message')
-    except Exception:
-        logger.error('мимо!')
-        return ('мимо!')
+        logger.info(SEND_MESSAGE.format(message=message))
+    except telegram.TelegramError as error:
+        logger.error(ERROR_TELEGRAMM.format(error=error), exc_info=True)
+        return error
 
 
-def get_api_answer(current_timestamp):
+def get_api_answer(timestamp):
     """Запрос к API."""
-    timestamp = current_timestamp or int(time.time())
-    params = {'from_date': timestamp}
+    request = {
+        'url': ENDPOINT,
+        'headers': HEADERS,
+        'params': {'from_date': timestamp}
+    }
     try:
-        current_timestamp = requests.get(
-            ENDPOINT, headers=HEADERS, params=params
-        )
+        response_statuses = requests.get(**request)
     except requests.exceptions.HTTPError as http_err:
-        logger.error("Http Error:", http_err)
-        return ("Http Error:", http_err)
-    except requests.exceptions.ConnectionError as connect_err:
-        logger.error("Error Connecting:", connect_err)
-        return ("Error Connecting:", connect_err)
-    if current_timestamp.status_code != HTTPStatus.OK.value:
-        raise HTTPNot200('HTTPNot200')
-    current_timestamp = current_timestamp.json()
-    logger.debug('удачно!')
-    return current_timestamp
+        raise HTTPError(ERROR_REQUEST_HTTP.format(
+            **request, error=http_err))
+    except requests.exceptions.RequestException as connect_err:
+        raise ConnectionError(ERROR_CONNECTING.format(
+            **request, error=connect_err))
+    statuses = response_statuses.json()
+    for field in ['error', 'code']:
+        if field in statuses:
+            raise RuntimeError(
+                RESPONSE_UNEXPECTED.format(
+                    **request, error=statuses.get(field),
+                    status=response_statuses.status_code))
+    if response_statuses.status_code != HTTPStatus.OK.value:
+        raise ValueError(ERROR_REPONSE.format(
+            **request, status=response_statuses.status_code))
+    logger.debug(statuses)
+    return statuses
 
 
 def check_response(response):
     """Проверка API на корректность."""
-    if len(response) == 0:
-        logger.error('Empty response')
     try:
-        homeworks = response['homeworks']
-    except KeyError as errkey:
-        logger.error('Key Error', errkey)
-        return ('Key homeworks no in response ', errkey)
-    logger.debug('answer homework done')
-    return homeworks[0]
+        homework = response['homeworks']
+    except KeyError as error:
+        raise error(ERROR_KEY).format(type=type(response))
+    if not isinstance(homework, list):
+        raise TypeError(HOMEWORK_TYPE.format(type=type(homework)))
+    logger.debug(homework)
+    return homework
 
 
 def parse_status(homework):
     """Сообщение с информацией о ревью."""
-    if 'homework_name' not in homework:
-        raise KeyError('Empty value homework_name')
     homework_name = homework['homework_name']
-    if 'status' not in homework:
-        raise KeyError('Empty value status')
     homework_status = homework['status']
+    if homework_status not in HOMEWORK_VERDICTS:
+        raise ValueError(
+            UNDOCUMENDED_STATUS.format(homework_status=homework_status))
     logger.debug(homework_status)
-    try:
-        verdict = HOMEWORK_STATUSES[homework_status]
-    except KeyError as errkey:
-        logger.error('Undocumented status of homework.', errkey)
-        return ('Undocumented status of homework.', errkey)
-    return f'Изменился статус проверки работы "{homework_name}". {verdict}'
+    return STATUS_CHANGED.format(
+        homework_name=homework_name, verdict=HOMEWORK_VERDICTS[homework_status]
+    )
 
 
 def check_tokens():
     """Проверка наличия токенов."""
-    if not all([PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]):
-        logger.critical(
-            'Not all required environment variables have been passed'
-        )
-        return False
+    for name in TOKENS:
+        if not globals()[name]:
+            logger.critical(ERROR_TOKENS.format(name=name))
+            return False
     return True
 
 
@@ -123,15 +142,16 @@ def main():
         try:
             response = get_api_answer(current_timestamp)
             homework = check_response(response)
-            message = parse_status(homework)
-            send_message(bot, message)
+            current_timestamp = response.get('current_date')
+            if homework:
+                send_message(bot, parse_status(homework[0]))
+            else:
+                logger.debug(NO_NEW_CHECKS)
             time.sleep(RETRY_TIME)
 
         except Exception as error:
             logger.error(error)
-            message = f'Сбой в работе программы: {error}'
-            send_message(bot, message)
-            time.sleep(RETRY_TIME)
+            send_message(bot, ERROR_PROJECT)
 
 
 if __name__ == '__main__':
