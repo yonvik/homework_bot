@@ -101,6 +101,8 @@ def get_api_answer(timestamp):
 
 def check_response(response):
     """Проверка API на корректность."""
+    if not isinstance(response, dict):
+        raise TypeError(HOMEWORK_TYPE)
     try:
         homework = response['homeworks']
     except KeyError as error:
