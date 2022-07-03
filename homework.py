@@ -28,7 +28,7 @@ HOMEWORK_VERDICTS = {
 }
 
 SEND_MESSAGE = 'Отправка сообщения: {message}'
-ERROR_TELEGRAMM = 'Не удалось отправить сообщение, ошибка: {error}'
+ERROR_SEND_MESSAGE = 'Не удалось отправить сообщение{message}, ошибка: {error}'
 ERROR_CONNECTING = 'Ошибка соединения: {error}'
 RESPONSE_UNEXPECTED = ('Неожиданный ответ сервера, ошибка: {error}'
                        'Ответ API: {status_code}')
@@ -65,7 +65,9 @@ def send_message(bot, message):
         bot.send_message(TELEGRAM_CHAT_ID, message)
         logger.info(SEND_MESSAGE.format(message=message))
     except telegram.TelegramError as error:
-        logger.exception(ERROR_TELEGRAMM.format(error=error))
+        logger.exception(ERROR_SEND_MESSAGE.format(
+            message=message,
+            error=error))
         raise error
 
 
@@ -87,7 +89,7 @@ def get_api_answer(timestamp):
             raise RuntimeError(
                 RESPONSE_UNEXPECTED.format(
                     **request, error=statuses.get(field),
-                    status_code=response_statuses.status_code))
+                    status_code=response_statuses.status_code(field)))
     if response_statuses.status_code != HTTPStatus.OK.value:
         raise ValueError(ERROR_REPONSE.format(
             **request, status_code=response_statuses.status_code))
@@ -97,7 +99,7 @@ def get_api_answer(timestamp):
 def check_response(response):
     """Проверка API на корректность."""
     if not isinstance(response, dict):
-        raise TypeError(RESPONSE_TYPE)
+        raise TypeError(RESPONSE_TYPE.format(type=type(response)))
     try:
         homeworks = response['homeworks']
     except KeyError as error:
@@ -128,7 +130,7 @@ def check_tokens():
     empty_tokens = [name for name in TOKENS if not globals()[name]]
     if empty_tokens:
         logger.critical(ERROR_TOKENS.format(
-            name=','.join(empty_tokens)))
+            name=','))
         return False
     return True
 
@@ -153,8 +155,12 @@ def main():
             message = ERROR_PROJECT.format(error=error)
             logger.error(message)
             if error_message != message:
-                error_message = message
-                send_message(bot, message)
+                try:
+                    error_message(bot, message)
+                except Exception as error:
+                    logger.exception(ERROR_PROJECT.format(error=error))
+                else:
+                    error_message = message
         finally:
             time.sleep(RETRY_TIME)
 
