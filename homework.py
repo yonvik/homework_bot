@@ -28,7 +28,8 @@ HOMEWORK_VERDICTS = {
 }
 
 SEND_MESSAGE = 'Отправка сообщения: {message}'
-ERROR_SEND_MESSAGE = 'Не удалось отправить сообщение{message}, ошибка: {error}'
+ERROR_SEND_MESSAGE = ('Не удалось отправить сообщение {message},'
+                      'ошибка: {error}')
 ERROR_CONNECTING = 'Ошибка соединения: {error}'
 RESPONSE_UNEXPECTED = ('Неожиданный ответ сервера, ошибка: {error}'
                        'Ответ API: {status_code}')
@@ -41,6 +42,7 @@ ERROR_MESSAGE_STATUS = ('Статус {homework_status} '
 STATUS_CHANGED = 'Изменился статус проверки работы "{homework_name}".{verdict}'
 ERROR_PROJECT = 'Сбой в работе программы: {error}'
 ERROR_TOKENS = 'Отсутствуют обязательные токены: {name}'
+ERROR_SEND_ERROR = 'Не удалось отправить сообщение об ошибке: {error}'
 NO_NEW_CHECKS = 'Нет новых работ для проверки статуса'
 ERROR_BOT = 'Работа бота остановлена'
 TOKENS = ['PRACTICUM_TOKEN', 'TELEGRAM_TOKEN', 'TELEGRAM_CHAT_ID']
@@ -89,7 +91,7 @@ def get_api_answer(timestamp):
             raise RuntimeError(
                 RESPONSE_UNEXPECTED.format(
                     **request, error=statuses.get(field),
-                    status_code=response_statuses.status_code(field)))
+                    status_code=field))
     if response_statuses.status_code != HTTPStatus.OK.value:
         raise ValueError(ERROR_REPONSE.format(
             **request, status_code=response_statuses.status_code))
@@ -130,7 +132,7 @@ def check_tokens():
     empty_tokens = [name for name in TOKENS if not globals()[name]]
     if empty_tokens:
         logger.critical(ERROR_TOKENS.format(
-            name=','))
+            name=empty_tokens))
         return False
     return True
 
@@ -156,9 +158,9 @@ def main():
             logger.error(message)
             if error_message != message:
                 try:
-                    error_message(bot, message)
+                    send_message(bot, message)
                 except Exception as error:
-                    logger.exception(ERROR_PROJECT.format(error=error))
+                    logger.exception(ERROR_SEND_ERROR.format(error=error))
                 else:
                     error_message = message
         finally:
